@@ -15,7 +15,8 @@ levels={}
 player={}
 enemies={}
 
-debuglines={"debug"}
+dird = {"right","left"}
+debuglines = {"debug"}
 
 function _init()
  initlevel()
@@ -30,6 +31,7 @@ function _update()
  countticks()
  
  animateplayer()
+ animatefoes()
  moveplayer()
  
  moveenemies()
@@ -88,20 +90,24 @@ function initlevel()
 	
 	levels[1].enemies={}
 	
-	levels[1].enemies[1]={}
-	levels[1].enemies[1].animation={32,33,34}
-	levels[1].enemies[1].pos={}
-	levels[1].enemies[1].pos.x=60
-	levels[1].enemies[1].pos.y=40
-	levels[1].enemies[1].cur_frame=levels[1].enemies[1].animation[1]
+	foe={}
+	foe.spd=1
+	foe.frames={32,33,34}
+	foe.x=68
+	foe.y=24
+	foe.cur_frame=foe.frames[1]
+	foe.h=8
+	foe.w=6
+	levels[1].enemies[1]=foe
 end
 
 function initenemies()
  --depends on level?
  for enemy in all(levels[cur_level].enemies) do
-  -- what?
+  enemy.dir=flr(rnd(2))
+  enemy.framei=1
+  enemy.animdelay=4
  end
- 
 end
 
 function drawplayer()
@@ -110,9 +116,9 @@ end
 
 function moveplayer()
  if btn(0) then
-  move("left")
+  move(player,"left")
  elseif btn(1) then
-  move("right")
+  move(player,"right")
  else
   player.walking=false
  end
@@ -135,13 +141,45 @@ end
 
 function drawenemies()
  for enemy in all(levels[cur_level].enemies) do
-  spr(enemy.cur_frame,enemy.pos.x,enemy.pos.y,1,1)
+  spr(enemy.cur_frame,enemy.x,enemy.y,1,1)
  end
 end
 
 function drawmap()
  initile=gettilepos(1,1,levels[cur_level])
  map(initile.x,initile.y,0,0,16,16)
+end
+
+function isagainstwall(spt)
+	cur_dir = dird[spt.dir+1]
+	inc = 1 --defaults to right
+	if cur_dir == "left" then
+		inc = -1
+	end
+	spt.x += inc
+	colliding = iscolliding(spt)
+	spt.x -= inc
+	return colliding
+end
+
+function walk(spt)
+	if not feetonground(spt) or
+	   isagainstwall(spt) then
+	 spt.dir+=1
+	 spt.dir%=2
+	end
+	debug(dird[spt.dir+1],3)
+	move(spt,dird[spt.dir+1])
+end
+
+function animatefoes()
+	for foe in all(levels[cur_level].enemies) do
+		walk(foe)
+		foe.framei+=1
+		foe.framei%=foe.animdelay
+		foe.framei%=count(foe.frames)
+		foe.cur_frame=foe.frames[foe.framei+1]
+	end
 end
 
 function animateplayer()
@@ -171,35 +209,35 @@ function animateplayer()
 
 end
 
-function move(dir,speed)
+function move(sprite,dir,speed)
  if speed and speed==0 then
   return false
  end
  
- player.walking=true
+ sprite.walking=true
  if dir=="left" then
-  player.flip=true
+  sprite.flip=true
  	dirmult=-1
  elseif dir=="right" then
-  player.flip=false
+  sprite.flip=false
   dirmult=1 
  end
 
 	if not speed then
-		speed = player.spd
+		speed = sprite.spd
 	end
- player.x+=speed*dirmult
- if iscolliding(7) then
+ sprite.x+=speed*dirmult
+ if iscolliding(sprite,7) then
  	if dir=="right" then
-	 	player.x=-1*player.w
+	 	sprite.x=-1*sprite.w
 	 elseif dir=="left" then
-	  player.x=128
+	  sprite.x=128
 	 end
  end
- if iscolliding() then
-  player.x-=speed*dirmult
+ if iscolliding(sprite) then
+  sprite.x-=speed*dirmult
   
-  if not move(dir,speed-1) then
+  if not move(sprite,dir,speed-1) then
    return false
   end
   
@@ -216,16 +254,16 @@ end
 
 function walkingsounds()
  if player.walking 
- and inground() then
+ and inground(player) then
   sfx(2)
  end
 end
 
-function iscolliding(val)
- pleftx=player.x+tilew-player.w-1
- prightx=pleftx+player.w-1
- ptopy=player.y
- pboty=player.y+player.h-1
+function iscolliding(sprite,val)
+ pleftx=sprite.x+tilew-sprite.w-1
+ prightx=pleftx+sprite.w-1
+ ptopy=sprite.y
+ pboty=sprite.y+sprite.h-1
  
  return solidc(pleftx,ptopy,val) or
  solidc(pleftx,pboty,val) or
@@ -234,19 +272,29 @@ function iscolliding(val)
  
 end
 
-function inground()
- player.y+=1
- if iscolliding(7) then
-  player.y=-1*player.h
+function feetonground(spt)
+ cur_dir = dird[spt.dir+1]
+ bottom = spt.y+spt.h --bottom plus one
+ xpoint = spt.x+8-spt.w-1 --defaults to left feet
+ if cur_dir == "right" then
+ 	xpoint += spt.w-1
  end
- colliding=iscolliding()
- player.y-=1
+ return solidc(xpoint,bottom,0)
+end
+
+function inground(sprite)
+ sprite.y+=1
+ if iscolliding(sprite,7) then
+  sprite.y=-1*sprite.h
+ end
+ colliding=iscolliding(sprite)
+ sprite.y-=1
  return colliding
 end
  
 function touchingceiling()
  player.y-=1
- colliding=iscolliding()
+ colliding=iscolliding(player)
  player.y+=1
  return colliding
 end
@@ -268,7 +316,7 @@ function collideright()
 end
 
 function startjump()
- if inground() then
+ if inground(player) then
   sfx(0)
   player.jumping=true
   player.cur_jumpheight=0
@@ -295,14 +343,14 @@ end
 
 function fall()
 
- if not inground() then
+ if not inground(player) then
   debug("falling",2)
   player.y+=gravity
   grv=gravity
-  if iscolliding(7) then
+  if iscolliding(player,7) then
    player.y=-1*player.h
   end
-  while (iscolliding() or grv<0) do
+  while (iscolliding(player) or grv<0) do
    player.y-=grv
    grv-=1
    player.y+=grv
@@ -499,7 +547,7 @@ __map__
 0400010101010101010101010101010101010004050101010101010505050505050505050505040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0400010101010101010101010101010101010004000101010101010101010101010101010100040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0402020201010101010101010101010102020204050505010505010101010101010101010505040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0402010101010101010101010101010201010204000101010105050505010101010101010100040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0402010101010101010101010105010201010204000101010105050505010101010101010100040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0400010101010201010105050202010101010004000101010101010101010101010505050100040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0400010102020202010101010101010101010004000101010101010101010501010101010100040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0402020101030303010101010101010101020204050501010101010505050505050505050505040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
