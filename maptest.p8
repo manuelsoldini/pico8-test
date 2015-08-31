@@ -171,7 +171,9 @@ end
 
 function moveweapon()
  if weapon.is_flying then
+  -- check collision with floor
   weapon.y+=weapon.fallspd
+  -- check collision with wall
   if weapon.flip then
    weapon.x-=weapon.spd
   else
